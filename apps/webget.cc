@@ -29,7 +29,7 @@ void get_URL(const string &host, const string &path) {
     const string request="GET "+path+" HTTP/1.1\r\nHost: "+ host +"\r\nConnection: close\r\n\r\n";
     socket.write(request);
     while(!socket.eof()){
-        std::cout<<socket.read()<<"\r\n";
+        std::cout<<socket.read();
     }
     socket.close();
 
