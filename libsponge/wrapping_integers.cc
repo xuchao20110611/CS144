@@ -14,8 +14,19 @@ using namespace std;
 //! \param n The input absolute 64-bit sequence number
 //! \param isn The initial sequence number
 WrappingInt32 wrap(uint64_t n, WrappingInt32 isn) {
-    DUMMY_CODE(n, isn);
-    return WrappingInt32{0};
+    uint64_t  isn_64=isn.raw_value();
+    uint32_t  wrap_32=0;
+    n=n-((n>>32)<<32);
+    n=n+isn_64;
+
+    if(n>static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())){
+        n=n-static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())-1;
+    }
+    if(n>static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())){
+        throw("wrong algo for wrap");
+    }
+    wrap_32=n;
+    return WrappingInt32{wrap_32};
 }
 
 //! Transform a WrappingInt32 into an "absolute" 64-bit sequence number (zero-indexed)
@@ -29,6 +40,44 @@ WrappingInt32 wrap(uint64_t n, WrappingInt32 isn) {
 //! and the other stream runs from the remote TCPSender to the local TCPReceiver and
 //! has a different ISN.
 uint64_t unwrap(WrappingInt32 n, WrappingInt32 isn, uint64_t checkpoint) {
-    DUMMY_CODE(n, isn, checkpoint);
-    return {};
+    uint64_t n_64=n.raw_value();
+    uint64_t isn_64=isn.raw_value();
+    uint64_t remainder_64=0;
+    uint64_t candidate1_64=0;
+    uint64_t candidate2_64=0;
+    uint64_t ans_64;
+
+    if(n_64>=isn_64){
+        remainder_64=n_64-isn_64;
+    } else {
+        remainder_64=n_64+static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())+1;
+        remainder_64=remainder_64-isn_64;
+    }
+    candidate1_64=remainder_64+((checkpoint>>32)<<32);
+    if(candidate1_64>checkpoint){
+        if(candidate1_64<=static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())){
+            ans_64=candidate1_64;
+        } else {
+            candidate2_64=candidate1_64-static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())-1;
+            if(candidate2_64>checkpoint||candidate1_64<checkpoint){
+                throw("bad algo unwrap: 1");
+            }
+            if(candidate1_64-checkpoint>checkpoint-candidate2_64){
+                ans_64=candidate2_64;
+            } else {
+                ans_64=candidate1_64;
+            }
+        }
+    } else {
+        candidate2_64=candidate1_64+static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())+1;
+        if(candidate2_64<checkpoint||candidate1_64>checkpoint){
+            throw("bad algo unwrap: 2");
+        }
+        if(candidate2_64-checkpoint>checkpoint-candidate1_64){
+            ans_64=candidate1_64;
+        } else {
+            ans_64=candidate2_64;
+        }
+    }
+    return ans_64;
 }
