@@ -66,7 +66,10 @@ void StreamReassembler::push_substring(const string &data, const size_t index, c
                     map_it=index_to_string_.erase(map_it);
                 }
             } else {
-                if(map_it->first+map_it->second.size()>=left){
+                if(map_it->first>right+1){
+                    index_to_string_[left]=buf;
+                    break;
+                } else if(map_it->first+map_it->second.size()>=left){
                     isin=true;
                     newstart=min(map_it->first,left);
                     segregated_str=merge_string(map_it->second, map_it->first, buf, left);
@@ -79,6 +82,8 @@ void StreamReassembler::push_substring(const string &data, const size_t index, c
         if(isin && !segregated_str.empty()){
             index_to_string_[newstart]=segregated_str;
         }
+        if(segregated_str[0]>='0'&&segregated_str[0]<='9')
+            cout<<"segregated: "<<segregated_str<<endl;
         // cout<<"from index: "<<newstart <<" "<<segregated_str.size()<<endl;
     }
     send_to_output();
@@ -134,6 +139,11 @@ string StreamReassembler::merge_string(string & str1, uint64_t index1,string & s
             merged_str[i]=str1[pos-index1];
         } else {
             merged_str[i]=str2[pos-index2];
+        }
+        if(index1<=pos && index1+str1.size()-1>=pos &&index2<=pos && index2+str2.size()-1>=pos){
+            if(str1[pos-index1]!=str2[pos-index2]){
+                // throw(double(5.6));
+            }
         }
     }
     return merged_str;
