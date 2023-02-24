@@ -20,12 +20,16 @@ class TCPReceiver {
     //! The maximum number of bytes we'll store.
     size_t _capacity;
 
+    bool isstart_; // whether the isn has been received
+    WrappingInt32 isn_32_;
+    void setStart(WrappingInt32 isn_32); // set the isn when the segment with SYN flag received and is start flag
+
   public:
     //! \brief Construct a TCP receiver
     //!
     //! \param capacity the maximum number of bytes that the receiver will
     //!                 store in its buffers at any give time.
-    TCPReceiver(const size_t capacity) : _reassembler(capacity), _capacity(capacity) {}
+    TCPReceiver(const size_t capacity) : _reassembler(capacity), _capacity(capacity), isstart_(false), isn_32_(0) {}
 
     //! \name Accessors to provide feedback to the remote TCPSender
     //!@{
