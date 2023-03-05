@@ -55,6 +55,9 @@ class StreamReassembler {
     //! \brief Is the internal state empty (other than the output stream)?
     //! \returns `true` if no substrings are waiting to be assembled
     bool empty() const;
+
+    // bool endtest() const{return isend_;};
+    // bool emptytest() const{return index_to_string_.empty();};
 };
 
 #endif  // SPONGE_LIBSPONGE_STREAM_REASSEMBLER_HH
