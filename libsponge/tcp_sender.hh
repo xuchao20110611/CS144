@@ -32,6 +32,20 @@ class TCPSender {
     //! the (absolute) sequence number for the next byte to be sent
     uint64_t _next_seqno{0};
 
+    // backup for all sent TCPSegment, used for retransmission
+    std::vector<TCPSegment> outstanding_segments_{};
+    // retransmission timer for the connection, constantly updated
+    unsigned int retransmission_timeout_;
+    // the absolute seqno of the last byte should be sent
+    uint64_t absolute_last_;
+    // the absolute seqno of the first byte should be sent
+    // uint64_t absolute_first_;
+    // the retransmission times
+    unsigned int consecutive_retransmissions_;
+    int retransmission_timer_;
+
+    void send_segment(TCPSegment & seg);
+
   public:
     //! Initialize a TCPSender
     TCPSender(const size_t capacity = TCPConfig::DEFAULT_CAPACITY,
