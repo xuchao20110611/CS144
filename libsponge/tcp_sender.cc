@@ -26,6 +26,7 @@ TCPSender::TCPSender(const size_t capacity, const uint16_t retx_timeout, const s
     , absolute_last_(0) // assume one should be sent, 0 is the last byte
     , consecutive_retransmissions_(0)
     , retransmission_timer_(-1) // -1 means not starting
+    , is_end_sent_(false)
     { }
 
 uint64_t TCPSender::bytes_in_flight() const { 
@@ -40,7 +41,7 @@ void TCPSender::fill_window() {
     // std::cout<<"fill_window, absolute_last_: "<<absolute_last_
     //     <<" _next_seqno: "<< _next_seqno
     //     <<" _stream.eof(): "<<_stream.eof()<<std::endl;
-    while(absolute_last_>=_next_seqno && !_stream.eof()){
+    while(absolute_last_>=_next_seqno && !is_end_sent_){
         // keeps adding TCPsegment until:
         // 1. absolute_last_+1 == _next_seqno
         // or
@@ -56,6 +57,7 @@ void TCPSender::fill_window() {
             next_segment.header().syn=true; // the first time, should add syn flag
         }
         if(_stream.eof()){
+            is_end_sent_=true;
             next_segment.header().fin=true; // when the _stream has been read out
         }
         next_segment.header().seqno=next_seqno();
