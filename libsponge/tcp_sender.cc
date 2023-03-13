@@ -81,6 +81,10 @@ void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
     consecutive_retransmissions_=0; // Reset the count of consecutive retransmissions back to zero.
     std::vector<TCPSegment> new_outstanding_segments;
     uint64_t absolute_ackno= unwrap(ackno, _isn, _next_seqno);
+    if(absolute_ackno>_next_seqno){
+        // impossible ackno
+        return ;
+    }
     if(absolute_ackno+window_size-1>absolute_last_){
         absolute_last_=absolute_ackno+window_size-1; // update the recorded window right
     }
