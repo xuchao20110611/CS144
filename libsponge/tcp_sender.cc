@@ -64,6 +64,7 @@ void TCPSender::fill_window() {
             break;
         }
         send_segment(next_segment);
+        _next_seqno+=next_segment.length_in_sequence_space();
         // cout<<"in while: _segments_out.empty(): "<<_segments_out.empty()<<std::endl;
         outstanding_segments_.push_back(next_segment);
         
@@ -114,9 +115,9 @@ void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
 //! \param[in] ms_since_last_tick the number of milliseconds since the last call to this method
 void TCPSender::tick(const size_t ms_since_last_tick) { 
     retransmission_timer_+=static_cast<int>(ms_since_last_tick);
-    if(static_cast<unsigned int>(retransmission_timer_)>retransmission_timeout_){
+    if(static_cast<unsigned int>(retransmission_timer_)>=retransmission_timeout_){
         if(outstanding_segments_.empty()){
-            // std::cout<<"timer still running when there is no outstanding segment"<<std::endl;
+            std::cout<<"timer still running when there is no outstanding segment"<<std::endl;
             // should not come here
         } else {
             send_segment(outstanding_segments_.front());
@@ -142,7 +143,6 @@ void TCPSender::send_empty_segment() {
 void TCPSender::send_segment(TCPSegment & seg){
     // send segment and set up the internal state
     _segments_out.emplace(seg);
-    _next_seqno+=seg.length_in_sequence_space();
     if(retransmission_timer_==-1 && seg.length_in_sequence_space()>0){
         retransmission_timer_=0;
     }
