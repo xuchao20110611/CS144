@@ -37,6 +37,9 @@ uint64_t TCPSender::bytes_in_flight() const {
  }
 
 void TCPSender::fill_window() {
+    // std::cout<<"fill_window, absolute_last_: "<<absolute_last_
+    //     <<" _next_seqno: "<< _next_seqno
+    //     <<" _stream.eof(): "<<_stream.eof()<<std::endl;
     while(absolute_last_>=_next_seqno && !_stream.eof()){
         // keeps adding TCPsegment until:
         // 1. absolute_last_+1 == _next_seqno
@@ -46,19 +49,26 @@ void TCPSender::fill_window() {
         TCPSegment next_segment;
         size_t len=min(TCPConfig::MAX_PAYLOAD_SIZE,absolute_last_-_next_seqno+1);
         std::string segment_content=_stream.read(len);
+        // std::cout<<"segment_content: "<<segment_content<<std::endl;
         Buffer segment_content_buffer{std::move(segment_content)};
-        next_segment.parse(segment_content_buffer,0);
+        next_segment.payload()=segment_content_buffer;
         if(_next_seqno==0){
             next_segment.header().syn=true; // the first time, should add syn flag
         }
         if(_stream.eof()){
             next_segment.header().fin=true; // when the _stream has been read out
         }
+        next_segment.header().seqno=next_seqno();
+        if(next_segment.length_in_sequence_space()==0){
+            // nothing in the input stream should be sent
+            break;
+        }
         send_segment(next_segment);
+        // cout<<"in while: _segments_out.empty(): "<<_segments_out.empty()<<std::endl;
         outstanding_segments_.push_back(next_segment);
-        _next_seqno+=next_segment.length_in_sequence_space();
         
     }
+    // cout<<"_segments_out.empty(): "<<_segments_out.empty()<<std::endl;
 }
 
 //! \param ackno The remote receiver's ackno (acknowledgment number)
@@ -73,9 +83,9 @@ void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
     if(absolute_ackno+window_size-1>absolute_last_){
         absolute_last_=absolute_ackno+window_size-1; // update the recorded window right
     }
-    if(absolute_ackno>_next_seqno){
-        _next_seqno=absolute_ackno; // update the recorded window left
-    }
+    // if(absolute_ackno>_next_seqno){
+    //     _next_seqno=absolute_ackno; // update the recorded window left
+    // }
     
     for(const TCPSegment & outstanding_segment:outstanding_segments_){
         // compare absolute seqno
@@ -83,13 +93,12 @@ void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
         uint64_t absolute_seqno= unwrap(seqno, _isn, _next_seqno);
         uint64_t segment_length=outstanding_segment.length_in_sequence_space();
         if(segment_length==0){
-            std::cout<<"empty segment in outstanding vector"<<std::endl;
+            // std::cout<<"empty segment in outstanding vector"<<std::endl;
         }
         uint64_t absolute_last=absolute_seqno+segment_length-1;
         if(absolute_last>=absolute_ackno){
             // still not fully acked
             new_outstanding_segments.push_back(outstanding_segment);
-            // send_segment(outstanding_segment);
         }
     }
     outstanding_segments_=new_outstanding_segments;
@@ -107,7 +116,7 @@ void TCPSender::tick(const size_t ms_since_last_tick) {
     retransmission_timer_+=static_cast<int>(ms_since_last_tick);
     if(static_cast<unsigned int>(retransmission_timer_)>retransmission_timeout_){
         if(outstanding_segments_.empty()){
-            std::cout<<"timer still running when there is no outstanding segment"<<std::endl;
+            // std::cout<<"timer still running when there is no outstanding segment"<<std::endl;
             // should not come here
         } else {
             send_segment(outstanding_segments_.front());
@@ -116,7 +125,7 @@ void TCPSender::tick(const size_t ms_since_last_tick) {
         retransmission_timeout_+=retransmission_timeout_;
         retransmission_timer_=0;
     }
- }
+}
 
 unsigned int TCPSender::consecutive_retransmissions() const { 
     return consecutive_retransmissions_;
@@ -126,12 +135,14 @@ void TCPSender::send_empty_segment() {
     TCPSegment emptyseg{};
     TCPHeader & segheader=emptyseg.header();
     segheader.ackno=next_seqno(); // attention: used for ack
+    segheader.seqno=next_seqno();
     send_segment(emptyseg);
 }
 
 void TCPSender::send_segment(TCPSegment & seg){
     // send segment and set up the internal state
     _segments_out.emplace(seg);
+    _next_seqno+=seg.length_in_sequence_space();
     if(retransmission_timer_==-1 && seg.length_in_sequence_space()>0){
         retransmission_timer_=0;
     }
