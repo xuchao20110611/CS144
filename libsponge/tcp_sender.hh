@@ -45,6 +45,8 @@ class TCPSender {
     bool is_end_sent_;
     // biggest ackno even got from receiver
     uint64_t absolute_ackno_;
+    // used for tick checking
+    int window_size_;
 
     void send_segment(TCPSegment & seg);
 

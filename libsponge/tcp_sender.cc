@@ -28,6 +28,7 @@ TCPSender::TCPSender(const size_t capacity, const uint16_t retx_timeout, const s
     , retransmission_timer_(-1) // -1 means not starting
     , is_end_sent_(false)
     , absolute_ackno_(0)
+    , window_size_(-1)
     { }
 
 uint64_t TCPSender::bytes_in_flight() const { 
@@ -39,9 +40,7 @@ uint64_t TCPSender::bytes_in_flight() const {
  }
 
 void TCPSender::fill_window() {
-    // std::cout<<"fill_window, absolute_last_: "<<absolute_last_
-    //     <<" _next_seqno: "<< _next_seqno
-    //     <<" _stream.buffer_size(): "<<_stream.buffer_size()<<std::endl;
+   
     while(absolute_last_>=_next_seqno && !is_end_sent_){
         // keeps adding TCPsegment until:
         // 1. absolute_last_+1 == _next_seqno
@@ -55,12 +54,10 @@ void TCPSender::fill_window() {
             next_segment.header().syn=true; // the first time, should add syn flag
         }
         std::string segment_content{_stream.read(len)};
-        // std::cout<<"1. segment_content: "<<segment_content
-        //     <<" len: "<<len<<std::endl;
+  
         Buffer segment_content_buffer{std::move(segment_content)};
         next_segment.payload()=segment_content_buffer;
-        // std::cout<<"segment_content_buffer.str(): "<<segment_content_buffer.str()
-        //     <<" len: "<<len<<std::endl;
+    
         size_t syn_byte= next_segment.header().syn? 1:0;
         if(_stream.eof()&&(next_segment.payload().str().size()+syn_byte<absolute_last_-_next_seqno+1)){
             is_end_sent_=true;
@@ -90,6 +87,7 @@ void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
     consecutive_retransmissions_=0; // Reset the count of consecutive retransmissions back to zero.
     std::vector<TCPSegment> new_outstanding_segments;
     uint64_t absolute_ackno= unwrap(ackno, _isn, _next_seqno);
+    window_size_=static_cast<int>(window_size);
     if(absolute_ackno>_next_seqno){
         // impossible ackno
         return ;
@@ -112,7 +110,7 @@ void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
         uint64_t absolute_seqno= unwrap(seqno, _isn, _next_seqno);
         uint64_t segment_length=outstanding_segment.length_in_sequence_space();
         if(segment_length==0){
-            // std::cout<<"empty segment in outstanding vector"<<std::endl;
+            std::cout<<"bug: empty segment in outstanding vector"<<std::endl;
         }
         uint64_t absolute_last=absolute_seqno+segment_length-1;
         if(absolute_last>=absolute_ackno){
@@ -121,27 +119,51 @@ void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
         }
     }
     outstanding_segments_=new_outstanding_segments;
-    if(!new_outstanding_segments.empty()){
+    if(window_size==0 && outstanding_segments_.empty()){
+        // send one byte 
+        TCPSegment next_segment;
+        std::string segment_content{_stream.read(1)};
+        Buffer segment_content_buffer{std::move(segment_content)};
+        next_segment.payload()=segment_content_buffer;
+        next_segment.header().seqno=next_seqno();
+        if(next_segment.length_in_sequence_space()==0){
+            if(_stream.eof()){
+                next_segment.header().fin=true;
+            } else {
+                // no need to send
+                return ;
+            }
+        }
+        _segments_out.emplace(next_segment);
+        _next_seqno+=next_segment.length_in_sequence_space();
+        outstanding_segments_.push_back(next_segment);
+    }
+    if(!outstanding_segments_.empty()){
         retransmission_timer_=0;
     } else {
         retransmission_timer_=-1;
     }
-    // push new segments to fullfill the window size
-    // fill_window();
+    
 }
 
 //! \param[in] ms_since_last_tick the number of milliseconds since the last call to this method
 void TCPSender::tick(const size_t ms_since_last_tick) { 
+    if(retransmission_timer_==-1){
+        std::cout<<"bug: timer does not start"<<std::endl;
+    }
     retransmission_timer_+=static_cast<int>(ms_since_last_tick);
     if(static_cast<unsigned int>(retransmission_timer_)>=retransmission_timeout_){
         if(outstanding_segments_.empty()){
-            std::cout<<"timer still running when there is no outstanding segment"<<std::endl;
+            std::cout<<"bug: timer still running when there is no outstanding segment"<<std::endl;
             // should not come here
         } else {
             send_segment(outstanding_segments_.front());
         }
-        consecutive_retransmissions_++;
-        retransmission_timeout_+=retransmission_timeout_;
+        if(window_size_!=0){
+            consecutive_retransmissions_++;
+            retransmission_timeout_+=retransmission_timeout_;
+        }
+        
         retransmission_timer_=0;
     }
 }
