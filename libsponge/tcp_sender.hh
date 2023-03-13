@@ -38,13 +38,13 @@ class TCPSender {
     unsigned int retransmission_timeout_;
     // the absolute seqno of the last byte should be sent
     uint64_t absolute_last_;
-    // the absolute seqno of the first byte should be sent
-    // uint64_t absolute_first_;
     // the retransmission times
     unsigned int consecutive_retransmissions_;
     int retransmission_timer_;
     // whether the end has been sent
     bool is_end_sent_;
+    // biggest ackno even got from receiver
+    uint64_t absolute_ackno_;
 
     void send_segment(TCPSegment & seg);
 

@@ -27,6 +27,7 @@ TCPSender::TCPSender(const size_t capacity, const uint16_t retx_timeout, const s
     , consecutive_retransmissions_(0)
     , retransmission_timer_(-1) // -1 means not starting
     , is_end_sent_(false)
+    , absolute_ackno_(0)
     { }
 
 uint64_t TCPSender::bytes_in_flight() const { 
@@ -40,7 +41,7 @@ uint64_t TCPSender::bytes_in_flight() const {
 void TCPSender::fill_window() {
     // std::cout<<"fill_window, absolute_last_: "<<absolute_last_
     //     <<" _next_seqno: "<< _next_seqno
-    //     <<" _stream.eof(): "<<_stream.eof()<<std::endl;
+    //     <<" _stream.buffer_size(): "<<_stream.buffer_size()<<std::endl;
     while(absolute_last_>=_next_seqno && !is_end_sent_){
         // keeps adding TCPsegment until:
         // 1. absolute_last_+1 == _next_seqno
@@ -49,17 +50,23 @@ void TCPSender::fill_window() {
         
         TCPSegment next_segment;
         size_t len=min(TCPConfig::MAX_PAYLOAD_SIZE,absolute_last_-_next_seqno+1);
-        std::string segment_content=_stream.read(len);
-        // std::cout<<"segment_content: "<<segment_content<<std::endl;
-        Buffer segment_content_buffer{std::move(segment_content)};
-        next_segment.payload()=segment_content_buffer;
-        if(_next_seqno==0){
+        if(_next_seqno==0 && len==absolute_last_-_next_seqno+1){
+            len--; // if limited by TCPConfig::MAX_PAYLOAD_SIZE, no need to -1
             next_segment.header().syn=true; // the first time, should add syn flag
         }
-        if(_stream.eof()){
+        std::string segment_content{_stream.read(len)};
+        // std::cout<<"1. segment_content: "<<segment_content
+        //     <<" len: "<<len<<std::endl;
+        Buffer segment_content_buffer{std::move(segment_content)};
+        next_segment.payload()=segment_content_buffer;
+        // std::cout<<"segment_content_buffer.str(): "<<segment_content_buffer.str()
+        //     <<" len: "<<len<<std::endl;
+        size_t syn_byte= next_segment.header().syn? 1:0;
+        if(_stream.eof()&&(next_segment.payload().str().size()+syn_byte<absolute_last_-_next_seqno+1)){
             is_end_sent_=true;
             next_segment.header().fin=true; // when the _stream has been read out
         }
+        // cout<<"next_segment.header().fin: "<<next_segment.header().fin<<endl;
         next_segment.header().seqno=next_seqno();
         if(next_segment.length_in_sequence_space()==0){
             // nothing in the input stream should be sent
@@ -90,6 +97,11 @@ void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
     if(absolute_ackno+window_size-1>absolute_last_){
         absolute_last_=absolute_ackno+window_size-1; // update the recorded window right
     }
+    if(absolute_ackno<=absolute_ackno_){
+        return ;
+    } else {
+        absolute_ackno_=absolute_ackno;
+    }
     // if(absolute_ackno>_next_seqno){
     //     _next_seqno=absolute_ackno; // update the recorded window left
     // }
@@ -115,7 +127,7 @@ void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
         retransmission_timer_=-1;
     }
     // push new segments to fullfill the window size
-    fill_window();
+    // fill_window();
 }
 
 //! \param[in] ms_since_last_tick the number of milliseconds since the last call to this method
