@@ -177,6 +177,8 @@ void TCPSender::send_empty_segment() {
     TCPHeader & segheader=emptyseg.header();
     segheader.ackno=next_seqno(); // attention: used for ack
     segheader.seqno=next_seqno();
+    // segheader.ack=true;     // not sure, it should not work
+    // segheader.win=window_size_; // not sure, it should not work
     send_segment(emptyseg);
 }
 
