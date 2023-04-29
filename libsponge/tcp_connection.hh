@@ -32,7 +32,9 @@ class TCPConnection {
     // time when the last segment has been received
     size_t time_last_segment_received_{0};
     // whether the connection is still active
-    bool is_active_{false};
+    bool is_active_{true};
+    // whether the TCPConnection has ever sent a fin segment
+    bool is_fin_sent_{false};
 
   public:
     //! \name "Input" interface for the writer

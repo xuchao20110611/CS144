@@ -29,18 +29,25 @@ size_t TCPConnection::time_since_last_segment_received() const {
 }
 
 void TCPConnection::segment_received(const TCPSegment &seg) {
-    cout<<"TCPConnection::segment_received: "<<endl;
+    // cout<<"TCPConnection::segment_received: "<<endl;
     const TCPHeader & receive_header=seg.header();
     time_last_segment_received_=0;
     if(receive_header.rst){
         set_RST();
         return ;
     }
+    
     _receiver.segment_received(seg);
+    if(_receiver.stream_out().eof() && !is_fin_sent_){
+        //  the TCPConnection's inbound stream ends before
+        //  the TCPConnection has ever sent a fin segment
+        _linger_after_streams_finish=false;
+    }
+    
     if(receive_header.ack){
         _sender.ack_received(receive_header.ackno,receive_header.win);
     }
-    if(receive_header.seqno.raw_value()>0 ){
+    if(seg.length_in_sequence_space()>0){
         // sent in reply, to reflect an update in the ackno and window size.
         _sender.send_empty_segment();
     } else if(receive_header.syn){
@@ -65,17 +72,17 @@ size_t TCPConnection::write(const string &data) {
 
 //! \param[in] ms_since_last_tick number of milliseconds since the last call to this method
 void TCPConnection::tick(const size_t ms_since_last_tick) {
-    cout<<"TCPConnection::tick: ms_since_last_tick: "<<ms_since_last_tick<<endl;
+    // cout<<"TCPConnection::tick: ms_since_last_tick: "<<ms_since_last_tick<<endl;
     _sender.tick(ms_since_last_tick);
     time_last_segment_received_+=ms_since_last_tick;
     if(_sender.consecutive_retransmissions()>TCPConfig::MAX_RETX_ATTEMPTS){
         send_RST();
         return ;
     }
+    send_TCPSegment_from_sender();
     bool prereq4=false; //  Prereq 4
-    /*unimplemented: whether the req4 is met */
     if(_linger_after_streams_finish){
-        if(time_last_segment_received_>10*static_cast<size_t>(_cfg.rt_timeout)){
+        if(time_last_segment_received_>=10*static_cast<size_t>(_cfg.rt_timeout)){
             prereq4=true;
         }
     } else {
@@ -90,10 +97,12 @@ void TCPConnection::tick(const size_t ms_since_last_tick) {
 
 void TCPConnection::end_input_stream() {
     _sender.stream_in().end_input();
+    _sender.fill_window();
+    send_TCPSegment_from_sender();
 }
 
 void TCPConnection::connect() {
-    std::cout<<"TCPConnection::connect(): start connecting"<<endl;
+    // std::cout<<"TCPConnection::connect(): start connecting"<<endl;
     _sender.fill_window();
     send_TCPSegment_from_sender();
 }
@@ -113,7 +122,7 @@ TCPConnection::~TCPConnection() {
 
 
 void TCPConnection::send_TCPSegment_from_sender(){
-    cout<<"TCPConnection::send_TCPSegment_from_sender()"<<endl;
+    // cout<<"TCPConnection::send_TCPSegment_from_sender()"<<endl;
     while(!_sender.segments_out().empty()){
         TCPSegment send_seg=_sender.segments_out().front();
         _sender.segments_out().pop();
@@ -126,7 +135,10 @@ void TCPConnection::send_TCPSegment_from_sender(){
             }
             send_seg.header().win=static_cast<uint16_t>(win);
         }
-        cout<<"TCPConnection::send_TCPSegment_from_sender(): send sth"<<endl;
+        // cout<<"TCPConnection::send_TCPSegment_from_sender(): send sth"<<endl;
+        if(send_seg.header().fin){
+            is_fin_sent_=true;
+        }
         _segments_out.emplace(send_seg);
 
     }

@@ -52,7 +52,7 @@ void TCPSender::fill_window() {
         if(_next_seqno==0 && len==absolute_last_-_next_seqno+1){
             len--; // if limited by TCPConfig::MAX_PAYLOAD_SIZE, no need to -1
             next_segment.header().syn=true; // the first time, should add syn flag
-            cout<<"TCPSender::fill_window(): send first time"<<endl;
+            // cout<<"TCPSender::fill_window(): send first time"<<endl;
         }
         std::string segment_content{_stream.read(len)};
   
@@ -70,7 +70,7 @@ void TCPSender::fill_window() {
             // nothing in the input stream should be sent
             break;
         }
-        cout<<"TCPSender::fill_window(): send sth"<<endl;
+        // cout<<"TCPSender::fill_window(): send sth"<<endl;
         send_segment(next_segment);
         _next_seqno+=next_segment.length_in_sequence_space();
         // cout<<"in while: _segments_out.empty(): "<<_segments_out.empty()<<std::endl;
@@ -85,7 +85,7 @@ void TCPSender::fill_window() {
 void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_size) { 
     // remove the tcp segment in outstanding_segments_ after fully acked
     // reset the retransmission timeout
-    std::cout<<"TCPSender::ack_received called with ackno.raw_value(): "<<ackno.raw_value()<<" window_size: "<<window_size<<std::endl;
+    // std::cout<<"TCPSender::ack_received called with ackno.raw_value(): "<<ackno.raw_value()<<" window_size: "<<window_size<<std::endl;
     retransmission_timeout_=_initial_retransmission_timeout; // Set the RTO back to its initial value.
     consecutive_retransmissions_=0; // Reset the count of consecutive retransmissions back to zero.
     std::vector<TCPSegment> new_outstanding_segments;
@@ -113,7 +113,7 @@ void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
         uint64_t absolute_seqno= unwrap(seqno, _isn, _next_seqno);
         uint64_t segment_length=outstanding_segment.length_in_sequence_space();
         if(segment_length==0){
-            std::cout<<"bug: empty segment in outstanding vector"<<std::endl;
+            // std::cout<<"bug: empty segment in outstanding vector"<<std::endl;
         }
         uint64_t absolute_last=absolute_seqno+segment_length-1;
         if(absolute_last>=absolute_ackno){
@@ -153,7 +153,7 @@ void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
 void TCPSender::tick(const size_t ms_since_last_tick) { 
     if(retransmission_timer_==-1){
         if(!outstanding_segments_.empty()){
-            std::cout<<"bug: timer does not start but there exists outstanding segments"<<std::endl;
+            // std::cout<<"bug: timer does not start but there exists outstanding segments"<<std::endl;
         }
         
         return ;
@@ -161,7 +161,7 @@ void TCPSender::tick(const size_t ms_since_last_tick) {
     retransmission_timer_+=static_cast<int>(ms_since_last_tick);
     if(static_cast<unsigned int>(retransmission_timer_)>=retransmission_timeout_){
         if(outstanding_segments_.empty()){
-            std::cout<<"bug: timer still running when there is no outstanding segment"<<std::endl;
+            // std::cout<<"bug: timer still running when there is no outstanding segment"<<std::endl;
             // should not come here
         } else {
             send_segment(outstanding_segments_.front());
