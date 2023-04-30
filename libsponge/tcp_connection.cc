@@ -47,6 +47,7 @@ void TCPConnection::segment_received(const TCPSegment &seg) {
     if(receive_header.ack){
         cout<<"TCPConnection::segment_received: receive_header.ack"<<endl;
         _sender.ack_received(receive_header.ackno,receive_header.win);
+        _sender.fill_window();
     }
     if(receive_header.syn){
         cout<<"TCPConnection::segment_received: receive_header.syn"<<endl;
