@@ -164,7 +164,7 @@ void TCPConnection::send_TCPSegment_from_sender(){
 
 void TCPConnection::send_RST(){
     std::cout<<"TCPConnection::send_RST(): send sth"<<endl;
-    send_TCPSegment_from_sender(); // clear cache
+    // send_TCPSegment_from_sender(); // clear cache
     _sender.send_empty_segment();
     TCPSegment send_seg=_sender.segments_out().front();
     _sender.segments_out().pop();
