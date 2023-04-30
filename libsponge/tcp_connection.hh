@@ -21,6 +21,21 @@ class TCPConnection {
     //! in case the remote TCPConnection doesn't know we've received its whole stream?
     bool _linger_after_streams_finish{true};
 
+    // deque all TCPSegments in _sender and send
+    void send_TCPSegment_from_sender();
+
+    // send RST and mark two bytestreams as error
+    void send_RST();
+    // set when RST sent or received
+    void set_RST();
+
+    // time when the last segment has been received
+    size_t time_last_segment_received_{0};
+    // whether the connection is still active
+    bool is_active_{true};
+    // whether the TCPConnection has ever sent a fin segment
+    bool is_fin_sent_{false};
+
   public:
     //! \name "Input" interface for the writer
     //!@{

@@ -83,8 +83,9 @@ void StreamReassembler::push_substring(const string &data, const size_t index, c
         if(isin && !segregated_str.empty()){
             index_to_string_[newstart]=segregated_str;
         }
-        if(segregated_str[0]>='0'&&segregated_str[0]<='9')
-            cout<<"segregated: "<<segregated_str<<endl;
+        if(segregated_str[0]>='0'&&segregated_str[0]<='9'){
+            // cout<<"segregated: "<<segregated_str<<endl;
+        }
         // cout<<"from index: "<<newstart <<" "<<segregated_str.size()<<endl;
     }
     send_to_output();

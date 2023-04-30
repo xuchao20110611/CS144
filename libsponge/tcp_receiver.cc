@@ -28,7 +28,12 @@ void TCPReceiver::segment_received(const TCPSegment &seg) {
     if(absolute_index_64==0 && !seg.header().syn){
         // it should be SYN
         // throw("bad algo: segment received");
-        cout<<"bad algo: segment received"<<endl;
+        // cout<<"bad algo: segment received"<<endl;
+    }
+    if(absolute_index_64==0){
+        // send with index which is supposed to be SYN
+        cout<<"TCPReceiver::segment_received: absolute_index_64==0"<<endl;
+        return;
     }
     // cout<<"absolute_index_64 in seg received: "<<absolute_index_64<<endl;
     // cout<<"write finish: "<< seg.header().fin<<endl;
