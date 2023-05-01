@@ -32,8 +32,39 @@ NetworkInterface::NetworkInterface(const EthernetAddress &ethernet_address, cons
 void NetworkInterface::send_datagram(const InternetDatagram &dgram, const Address &next_hop) {
     // convert IP address of next hop to raw 32-bit representation (used in ARP header)
     const uint32_t next_hop_ip = next_hop.ipv4_numeric();
+    
+    
+    if(ip2eth_.find(next_hop_ip)==ip2eth_.end()){
+        // no eth stored
+        ip2dgram_[next_hop_ip].push_back(dgram);
+        /*unimplemented: check whether the request has been sent in 5 seconds*/
 
-    DUMMY_CODE(dgram, next_hop, next_hop_ip);
+        ARPMessage arp_request_gram;
+        arp_request_gram.opcode=ARPMessage::OPCODE_REQUEST;
+        arp_request_gram.sender_ethernet_address=_ethernet_address;
+        arp_request_gram.sender_ip_address=_ip_address.ipv4_numeric();
+        arp_request_gram.target_ethernet_address=ETHERNET_BROADCAST;
+        arp_request_gram.target_ip_address=next_hop_ip;
+
+
+
+        EthernetFrame arp_request_frame;
+        arp_request_frame.header().type=EthernetHeader::TYPE_ARP;
+        arp_request_frame.header().src=_ethernet_address;
+        arp_request_frame.header().dst=ETHERNET_BROADCAST;
+        arp_request_frame.payload()=arp_request_gram.serialize();
+        _frames_out.emplace(arp_request_frame);
+    } else{
+        EthernetFrame send_eth_frame;
+        send_eth_frame.payload()=dgram.serialize();
+        send_eth_frame.header().type=EthernetHeader::TYPE_IPv4;
+        send_eth_frame.header().src=_ethernet_address;
+        send_eth_frame.header().dst=ip2eth_[next_hop_ip];
+        _frames_out.emplace(send_eth_frame);
+    }
+
+    
+
 }
 
 //! \param[in] frame the incoming Ethernet frame
@@ -58,9 +89,9 @@ optional<InternetDatagram> NetworkInterface::recv_frame(const EthernetFrame &fra
         if(arp_gram.parse(frame.payload().concatenate())==ParseResult::NoError){
             EthernetAddress sender_eth=arp_gram.sender_ethernet_address;
             uint32_t sender_ip=arp_gram.sender_ip_address;
-            std::string sender_ip_str=Address::from_ipv4_numeric(sender_ip).ip();
-            ip2time_[sender_ip_str]=0;
-            ip2eth_[sender_ip_str]=sender_eth;
+            // std::string sender_ip_str=Address::from_ipv4_numeric(sender_ip).ip();
+            ip2time_[sender_ip]=0;
+            ip2eth_[sender_ip]=sender_eth;
             if(ARPMessage::OPCODE_REQUEST==arp_gram.opcode){
                 ARPMessage reply_arp_gram=arp_gram;
                 reply_arp_gram.opcode=ARPMessage::OPCODE_REPLY;
@@ -73,9 +104,12 @@ optional<InternetDatagram> NetworkInterface::recv_frame(const EthernetFrame &fra
                 reply_eth_frame.payload()=reply_arp_gram.serialize();
                 reply_eth_frame.header().type=EthernetHeader::TYPE_ARP;
                 reply_eth_frame.header().dst=e_header.src;
-                reply_eth_frame.header().src=e_header.dst;
+                reply_eth_frame.header().src=_ethernet_address;
 
                 _frames_out.emplace(reply_eth_frame);
+            }else {
+                /*unimplemented: arp reply got, send hanged dgram*/
+
             }
             
         } else {
@@ -91,4 +125,15 @@ optional<InternetDatagram> NetworkInterface::recv_frame(const EthernetFrame &fra
 }
 
 //! \param[in] ms_since_last_tick the number of milliseconds since the last call to this method
-void NetworkInterface::tick(const size_t ms_since_last_tick) { DUMMY_CODE(ms_since_last_tick); }
+void NetworkInterface::tick(const size_t ms_since_last_tick) { 
+    std::unordered_map<uint32_t, int>::iterator it=ip2time_.begin();
+    while(it!=ip2time_.end()){
+        it.second+=ms_since_last_tick;
+        if(it.second>=30){
+            ip2eth_.erase(it.first);
+            it=ip2time_.erase(it);
+        } else {
+            it++;
+        }
+    }
+}

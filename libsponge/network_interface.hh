@@ -8,6 +8,7 @@
 #include <optional>
 #include <queue>
 #include <unordered_map>
+#include <vector>
 
 //! \brief A "network interface" that connects IP (the internet layer, or network layer)
 //! with Ethernet (the network access layer, or link layer).
@@ -42,9 +43,11 @@ class NetworkInterface {
     std::queue<EthernetFrame> _frames_out{};
 
     // store the mapping from ip to ethernet addr
-    std::unordered_map<std::string, EthernetAddress> ip2eth_;
+    std::unordered_map<uint32_t, EthernetAddress> ip2eth_{};
     // store the storage time for each ip
-    std::unordered_map<std::string, int> ip2time_;
+    std::unordered_map<uint32_t, size_t> ip2time_{};
+    // hanged datagram which should be send as soon as the eth address has been known
+    std::unordered_map<uint32_t, std::vector<InternetDatagram>> ip2dgram_{};
 
   public:
     //! \brief Construct a network interface with given Ethernet (network-access-layer) and IP (internet-layer) addresses
