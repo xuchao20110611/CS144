@@ -38,7 +38,55 @@ void NetworkInterface::send_datagram(const InternetDatagram &dgram, const Addres
 
 //! \param[in] frame the incoming Ethernet frame
 optional<InternetDatagram> NetworkInterface::recv_frame(const EthernetFrame &frame) {
-    DUMMY_CODE(frame);
+    const EthernetHeader & e_header=frame.header();
+    if(e_header.dst!=_ethernet_address && e_header.dst!=ETHERNET_BROADCAST){
+        // not destined in this interface
+        return {};
+    }
+    if(e_header.type==EthernetHeader::TYPE_IPv4){
+        InternetDatagram ip_gram;
+        
+        if(ip_gram.parse(frame.payload().concatenate())==ParseResult::NoError){
+            return ip_gram;
+        } else {
+            cout<<"NetworkInterface::recv_frame: parse ipv4 with error"<<endl;
+            return {};
+        }
+
+    } else if(e_header.type==EthernetHeader::TYPE_ARP){
+        ARPMessage arp_gram;
+        if(arp_gram.parse(frame.payload().concatenate())==ParseResult::NoError){
+            EthernetAddress sender_eth=arp_gram.sender_ethernet_address;
+            uint32_t sender_ip=arp_gram.sender_ip_address;
+            std::string sender_ip_str=Address::from_ipv4_numeric(sender_ip).ip();
+            ip2time_[sender_ip_str]=0;
+            ip2eth_[sender_ip_str]=sender_eth;
+            if(ARPMessage::OPCODE_REQUEST==arp_gram.opcode){
+                ARPMessage reply_arp_gram=arp_gram;
+                reply_arp_gram.opcode=ARPMessage::OPCODE_REPLY;
+                reply_arp_gram.sender_ethernet_address=_ethernet_address;
+                reply_arp_gram.sender_ip_address=_ip_address.ipv4_numeric();
+                reply_arp_gram.target_ethernet_address=sender_eth;
+                reply_arp_gram.target_ip_address=sender_ip;
+
+                EthernetFrame reply_eth_frame;
+                reply_eth_frame.payload()=reply_arp_gram.serialize();
+                reply_eth_frame.header().type=EthernetHeader::TYPE_ARP;
+                reply_eth_frame.header().dst=e_header.src;
+                reply_eth_frame.header().src=e_header.dst;
+
+                _frames_out.emplace(reply_eth_frame);
+            }
+            
+        } else {
+            cout<<"NetworkInterface::recv_frame: parse arp with error"<<endl;
+            
+        }
+        return {};
+        
+    } else {
+        cerr<<"NetworkInterface::recv_frame: unsupported ethernet type"<<endl;
+    }
     return {};
 }
 
