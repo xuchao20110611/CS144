@@ -52,7 +52,7 @@ class NetworkInterface {
     std::unordered_map<uint32_t, std::vector<InternetDatagram>> ip2dgram_{};
 
     void send_ipv4gram(const InternetDatagram & dgram, EthernetAddress dst, EthernetAddress src);
-    void send_arpdgram(const InternetDatagram & dgram, EthernetAddress dst, EthernetAddress src);
+    void send_arpdgram(const struct ARPMessage & dgram, EthernetAddress dst, EthernetAddress src);
     ARPMessage make_ARPMessage(uint16_t opcode, EthernetAddress sender_ethernet_address, uint32_t sender_ip_address, EthernetAddress target_ethernet_address, uint32_t target_ip_address);
   public:
     //! \brief Construct a network interface with given Ethernet (network-access-layer) and IP (internet-layer) addresses

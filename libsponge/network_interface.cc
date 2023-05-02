@@ -38,11 +38,11 @@ void NetworkInterface::send_datagram(const InternetDatagram &dgram, const Addres
         // no eth stored
         ip2dgram_[next_hop_ip].push_back(dgram);
         if(arp_request_ip2time_.find(next_hop_ip)==arp_request_ip2time_.end()){
-            ARPMessage arp_request_gram=make_ARPMessage(
+            struct ARPMessage arp_request_gram=make_ARPMessage(
                 ARPMessage::OPCODE_REQUEST,
                 _ethernet_address,
                 _ip_address.ipv4_numeric(),
-                ETHERNET_BROADCAST,
+                EthernetAddress{},
                 next_hop_ip
             );
             arp_request_ip2time_[next_hop_ip]=0;
@@ -77,7 +77,7 @@ optional<InternetDatagram> NetworkInterface::recv_frame(const EthernetFrame &fra
         }
 
     } else if(e_header.type==EthernetHeader::TYPE_ARP){
-        ARPMessage arp_gram;
+        struct ARPMessage arp_gram;
         if(arp_gram.parse(frame.payload().concatenate())==ParseResult::NoError){
             EthernetAddress sender_eth=arp_gram.sender_ethernet_address;
             uint32_t sender_ip=arp_gram.sender_ip_address;
@@ -86,15 +86,17 @@ optional<InternetDatagram> NetworkInterface::recv_frame(const EthernetFrame &fra
             ip2eth_[sender_ip]=sender_eth;
             arp_request_ip2time_.erase(sender_ip);
             if(ARPMessage::OPCODE_REQUEST==arp_gram.opcode){
-                ARPMessage reply_arp_gram=make_ARPMessage(
-                    ARPMessage::OPCODE_REPLY,
-                    _ethernet_address,
-                    _ip_address.ipv4_numeric(),
-                    sender_eth,
-                    sender_ip
-                );
-                
-                send_arpdgram(reply_arp_gram, e_header.src, _ethernet_address);
+                if(arp_gram.target_ip_address==_ip_address.ipv4_numeric()){
+                    struct ARPMessage reply_arp_gram=make_ARPMessage(
+                        ARPMessage::OPCODE_REPLY,
+                        _ethernet_address,
+                        _ip_address.ipv4_numeric(),
+                        sender_eth,
+                        sender_ip
+                    );
+                    
+                    send_arpdgram(reply_arp_gram, e_header.src, _ethernet_address);
+                }               
                 
             }
             if(ip2dgram_.find(sender_ip)!=ip2dgram_.end()){
@@ -118,11 +120,11 @@ optional<InternetDatagram> NetworkInterface::recv_frame(const EthernetFrame &fra
 
 //! \param[in] ms_since_last_tick the number of milliseconds since the last call to this method
 void NetworkInterface::tick(const size_t ms_since_last_tick) { 
-    std::unordered_map<uint32_t, int>::iterator it=ip2time_.begin();
+    std::unordered_map<uint32_t, size_t>::iterator it=ip2time_.begin();
     while(it!=ip2time_.end()){
-        it.second+=ms_since_last_tick;
-        if(it.second>=30000){
-            ip2eth_.erase(it.first);
+        it->second+=ms_since_last_tick;
+        if(it->second>=30000){
+            ip2eth_.erase(it->first);
             it=ip2time_.erase(it);
         } else {
             it++;
@@ -130,8 +132,8 @@ void NetworkInterface::tick(const size_t ms_since_last_tick) {
     }
     it=arp_request_ip2time_.begin();
     while(it!=arp_request_ip2time_.end()){
-        it.second+=ms_since_last_tick;
-        if(it.second>5000){
+        it->second+=ms_since_last_tick;
+        if(it->second>5000){
             it=arp_request_ip2time_.erase(it);
         } else {
             it++;
@@ -148,7 +150,7 @@ void NetworkInterface::send_ipv4gram(const InternetDatagram & dgram, EthernetAdd
     _frames_out.emplace(send_eth_frame);
 }
 
-void NetworkInterface::send_arpdgram(const InternetDatagram & dgram, EthernetAddress dst, EthernetAddress src){
+void NetworkInterface::send_arpdgram(const struct ARPMessage & dgram, EthernetAddress dst, EthernetAddress src){
     EthernetFrame arp_frame;
     arp_frame.header().type=EthernetHeader::TYPE_ARP;
     arp_frame.header().src=src;
@@ -158,7 +160,7 @@ void NetworkInterface::send_arpdgram(const InternetDatagram & dgram, EthernetAdd
 }
 
 ARPMessage NetworkInterface::make_ARPMessage(uint16_t opcode, EthernetAddress sender_ethernet_address, uint32_t sender_ip_address, EthernetAddress target_ethernet_address, uint32_t target_ip_address){
-    ARPMessage arp_gram;
+    struct ARPMessage arp_gram;
     arp_gram.opcode=opcode;
     arp_gram.sender_ethernet_address=sender_ethernet_address;
     arp_gram.sender_ip_address=sender_ip_address;
