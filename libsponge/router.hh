@@ -5,6 +5,7 @@
 
 #include <optional>
 #include <queue>
+#include <unordered_map>
 
 //! \brief A wrapper for NetworkInterface that makes the host-side
 //! interface asynchronous: instead of returning received datagrams
@@ -48,6 +49,11 @@ class Router {
     //! as specified by the route with the longest prefix_length that matches the
     //! datagram's destination address.
     void route_one_datagram(InternetDatagram &dgram);
+
+    // the matched prefix to next hop address
+    std::unordered_map<uint32_t,std::optional<Address>> matched_prefix_to_next_hop_{};
+    // the matched prefix to sending out interface number
+    std::unordered_map<uint32_t,size_t> matched_prefix_to_interface_num_{};
 
   public:
     //! Add an interface to the router

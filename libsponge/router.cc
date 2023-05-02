@@ -29,14 +29,48 @@ void Router::add_route(const uint32_t route_prefix,
     cerr << "DEBUG: adding route " << Address::from_ipv4_numeric(route_prefix).ip() << "/" << int(prefix_length)
          << " => " << (next_hop.has_value() ? next_hop->ip() : "(direct)") << " on interface " << interface_num << "\n";
 
-    DUMMY_CODE(route_prefix, prefix_length, next_hop, interface_num);
-    // Your code here.
+    uint32_t matched_prefix=route_prefix;
+    uint8_t useless_bits=32-prefix_length;
+    matched_prefix=matched_prefix>>useless_bits;
+    matched_prefix=matched_prefix<<useless_bits;
+    
+    matched_prefix_to_next_hop_[matched_prefix]=next_hop;
+    matched_prefix_to_interface_num_[matched_prefix]=interface_num;
 }
 
 //! \param[in] dgram The datagram to be routed
 void Router::route_one_datagram(InternetDatagram &dgram) {
-    DUMMY_CODE(dgram);
-    // Your code here.
+    if(dgram.header().ttl<=1){
+        return;
+    }
+    dgram.header().ttl--;
+    bool is_match=false;
+    uint32_t target_ip=dgram.header().dst;
+    uint32_t next_hop_ip=0;
+    std::unordered_map<uint32_t,size_t>::iterator it=matched_prefix_to_interface_num_.begin();
+    while(it!=matched_prefix_to_interface_num_.end()){
+        uint32_t check_ip=it->first;
+        if((check_ip & target_ip)==check_ip){
+            is_match=true;
+            if(check_ip>next_hop_ip){
+                next_hop_ip=check_ip;
+            }
+        }
+        it++;
+    }
+
+    if(!is_match){
+        // If no routes matched, the router drops the datagram.
+        return ;
+    }
+    if(matched_prefix_to_next_hop_[next_hop_ip].has_value()){
+        interface(matched_prefix_to_interface_num_[next_hop_ip])
+        .send_datagram(dgram,matched_prefix_to_next_hop_[next_hop_ip].value());
+    } else {
+        interface(matched_prefix_to_interface_num_[next_hop_ip])
+        .send_datagram(dgram, Address::from_ipv4_numeric(target_ip));
+    }
+     
 }
 
 void Router::route() {
