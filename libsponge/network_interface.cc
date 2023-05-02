@@ -37,30 +37,22 @@ void NetworkInterface::send_datagram(const InternetDatagram &dgram, const Addres
     if(ip2eth_.find(next_hop_ip)==ip2eth_.end()){
         // no eth stored
         ip2dgram_[next_hop_ip].push_back(dgram);
-        /*unimplemented: check whether the request has been sent in 5 seconds*/
-
-        ARPMessage arp_request_gram;
-        arp_request_gram.opcode=ARPMessage::OPCODE_REQUEST;
-        arp_request_gram.sender_ethernet_address=_ethernet_address;
-        arp_request_gram.sender_ip_address=_ip_address.ipv4_numeric();
-        arp_request_gram.target_ethernet_address=ETHERNET_BROADCAST;
-        arp_request_gram.target_ip_address=next_hop_ip;
-
-
-
-        EthernetFrame arp_request_frame;
-        arp_request_frame.header().type=EthernetHeader::TYPE_ARP;
-        arp_request_frame.header().src=_ethernet_address;
-        arp_request_frame.header().dst=ETHERNET_BROADCAST;
-        arp_request_frame.payload()=arp_request_gram.serialize();
-        _frames_out.emplace(arp_request_frame);
+        if(arp_request_ip2time_.find(next_hop_ip)==arp_request_ip2time_.end()){
+            ARPMessage arp_request_gram=make_ARPMessage(
+                ARPMessage::OPCODE_REQUEST,
+                _ethernet_address,
+                _ip_address.ipv4_numeric(),
+                ETHERNET_BROADCAST,
+                next_hop_ip
+            );
+            arp_request_ip2time_[next_hop_ip]=0;
+            send_arpdgram(arp_request_gram, ETHERNET_BROADCAST,_ethernet_address);
+        }
+        
+        
     } else{
-        EthernetFrame send_eth_frame;
-        send_eth_frame.payload()=dgram.serialize();
-        send_eth_frame.header().type=EthernetHeader::TYPE_IPv4;
-        send_eth_frame.header().src=_ethernet_address;
-        send_eth_frame.header().dst=ip2eth_[next_hop_ip];
-        _frames_out.emplace(send_eth_frame);
+        send_ipv4gram(dgram,ip2eth_[next_hop_ip],_ethernet_address);
+        
     }
 
     
@@ -92,24 +84,24 @@ optional<InternetDatagram> NetworkInterface::recv_frame(const EthernetFrame &fra
             // std::string sender_ip_str=Address::from_ipv4_numeric(sender_ip).ip();
             ip2time_[sender_ip]=0;
             ip2eth_[sender_ip]=sender_eth;
+            arp_request_ip2time_.erase(sender_ip);
             if(ARPMessage::OPCODE_REQUEST==arp_gram.opcode){
-                ARPMessage reply_arp_gram=arp_gram;
-                reply_arp_gram.opcode=ARPMessage::OPCODE_REPLY;
-                reply_arp_gram.sender_ethernet_address=_ethernet_address;
-                reply_arp_gram.sender_ip_address=_ip_address.ipv4_numeric();
-                reply_arp_gram.target_ethernet_address=sender_eth;
-                reply_arp_gram.target_ip_address=sender_ip;
-
-                EthernetFrame reply_eth_frame;
-                reply_eth_frame.payload()=reply_arp_gram.serialize();
-                reply_eth_frame.header().type=EthernetHeader::TYPE_ARP;
-                reply_eth_frame.header().dst=e_header.src;
-                reply_eth_frame.header().src=_ethernet_address;
-
-                _frames_out.emplace(reply_eth_frame);
-            }else {
-                /*unimplemented: arp reply got, send hanged dgram*/
-
+                ARPMessage reply_arp_gram=make_ARPMessage(
+                    ARPMessage::OPCODE_REPLY,
+                    _ethernet_address,
+                    _ip_address.ipv4_numeric(),
+                    sender_eth,
+                    sender_ip
+                );
+                
+                send_arpdgram(reply_arp_gram, e_header.src, _ethernet_address);
+                
+            }
+            if(ip2dgram_.find(sender_ip)!=ip2dgram_.end()){
+                for(const InternetDatagram & dgram:ip2dgram_[sender_ip]){
+                    send_ipv4gram(dgram, sender_eth,_ethernet_address);
+                }
+                ip2dgram_.erase(sender_ip);
             }
             
         } else {
@@ -129,11 +121,48 @@ void NetworkInterface::tick(const size_t ms_since_last_tick) {
     std::unordered_map<uint32_t, int>::iterator it=ip2time_.begin();
     while(it!=ip2time_.end()){
         it.second+=ms_since_last_tick;
-        if(it.second>=30){
+        if(it.second>=30000){
             ip2eth_.erase(it.first);
             it=ip2time_.erase(it);
         } else {
             it++;
         }
     }
+    it=arp_request_ip2time_.begin();
+    while(it!=arp_request_ip2time_.end()){
+        it.second+=ms_since_last_tick;
+        if(it.second>5000){
+            it=arp_request_ip2time_.erase(it);
+        } else {
+            it++;
+        }
+    }
+}
+
+void NetworkInterface::send_ipv4gram(const InternetDatagram & dgram, EthernetAddress dst, EthernetAddress src){
+    EthernetFrame send_eth_frame;
+    send_eth_frame.payload()=dgram.serialize();
+    send_eth_frame.header().type=EthernetHeader::TYPE_IPv4;
+    send_eth_frame.header().src=src;
+    send_eth_frame.header().dst=dst;
+    _frames_out.emplace(send_eth_frame);
+}
+
+void NetworkInterface::send_arpdgram(const InternetDatagram & dgram, EthernetAddress dst, EthernetAddress src){
+    EthernetFrame arp_frame;
+    arp_frame.header().type=EthernetHeader::TYPE_ARP;
+    arp_frame.header().src=src;
+    arp_frame.header().dst=dst;
+    arp_frame.payload()=dgram.serialize();
+    _frames_out.emplace(arp_frame);
+}
+
+ARPMessage NetworkInterface::make_ARPMessage(uint16_t opcode, EthernetAddress sender_ethernet_address, uint32_t sender_ip_address, EthernetAddress target_ethernet_address, uint32_t target_ip_address){
+    ARPMessage arp_gram;
+    arp_gram.opcode=opcode;
+    arp_gram.sender_ethernet_address=sender_ethernet_address;
+    arp_gram.sender_ip_address=sender_ip_address;
+    arp_gram.target_ethernet_address=target_ethernet_address;
+    arp_gram.target_ip_address=target_ip_address;
+    return arp_gram;
 }

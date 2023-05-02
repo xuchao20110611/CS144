@@ -46,9 +46,14 @@ class NetworkInterface {
     std::unordered_map<uint32_t, EthernetAddress> ip2eth_{};
     // store the storage time for each ip
     std::unordered_map<uint32_t, size_t> ip2time_{};
+    // store the storage time for each arp request
+    std::unordered_map<uint32_t, size_t> arp_request_ip2time_{};
     // hanged datagram which should be send as soon as the eth address has been known
     std::unordered_map<uint32_t, std::vector<InternetDatagram>> ip2dgram_{};
 
+    void send_ipv4gram(const InternetDatagram & dgram, EthernetAddress dst, EthernetAddress src);
+    void send_arpdgram(const InternetDatagram & dgram, EthernetAddress dst, EthernetAddress src);
+    ARPMessage make_ARPMessage(uint16_t opcode, EthernetAddress sender_ethernet_address, uint32_t sender_ip_address, EthernetAddress target_ethernet_address, uint32_t target_ip_address);
   public:
     //! \brief Construct a network interface with given Ethernet (network-access-layer) and IP (internet-layer) addresses
     NetworkInterface(const EthernetAddress &ethernet_address, const Address &ip_address);
