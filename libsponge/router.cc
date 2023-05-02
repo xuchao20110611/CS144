@@ -31,9 +31,12 @@ void Router::add_route(const uint32_t route_prefix,
 
     uint32_t matched_prefix=route_prefix;
     uint8_t useless_bits=32-prefix_length;
-    matched_prefix=matched_prefix>>useless_bits;
-    matched_prefix=matched_prefix<<useless_bits;
-    
+    if(useless_bits==32){      
+        matched_prefix=0;
+    }else {
+        matched_prefix=matched_prefix>>useless_bits;       
+    }
+    matched_prefix_to_prefix_length_[matched_prefix]=prefix_length;
     matched_prefix_to_next_hop_[matched_prefix]=next_hop;
     matched_prefix_to_interface_num_[matched_prefix]=interface_num;
 }
@@ -44,23 +47,34 @@ void Router::route_one_datagram(InternetDatagram &dgram) {
         return;
     }
     dgram.header().ttl--;
-    bool is_match=false;
+    uint8_t match_length=0;
     uint32_t target_ip=dgram.header().dst;
     uint32_t next_hop_ip=0;
-    std::unordered_map<uint32_t,size_t>::iterator it=matched_prefix_to_interface_num_.begin();
-    while(it!=matched_prefix_to_interface_num_.end()){
+    bool is_find=false;
+    std::unordered_map<uint32_t,uint8_t>::iterator it=matched_prefix_to_prefix_length_.begin();
+    while(it!=matched_prefix_to_prefix_length_.end()){
         uint32_t check_ip=it->first;
-        if((check_ip & target_ip)==check_ip){
-            is_match=true;
-            if(check_ip>next_hop_ip){
+        uint8_t check_prefix_length= it->second;
+        uint32_t check_target_ip;
+        
+        if(check_prefix_length==0){
+            check_target_ip=0;
+        } else {
+            check_target_ip=(target_ip>>(32-check_prefix_length));
+        }
+        if(check_target_ip==check_ip){
+            is_find=true;
+            if(match_length<=check_prefix_length){
+                match_length=check_prefix_length;
                 next_hop_ip=check_ip;
             }
         }
         it++;
     }
 
-    if(!is_match){
+    if(!is_find){
         // If no routes matched, the router drops the datagram.
+        cout<<"Router::route_one_datagram: !is_find"<<endl;
         return ;
     }
     if(matched_prefix_to_next_hop_[next_hop_ip].has_value()){

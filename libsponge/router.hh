@@ -50,6 +50,8 @@ class Router {
     //! datagram's destination address.
     void route_one_datagram(InternetDatagram &dgram);
 
+    // the matched prefix to prefix length
+    std::unordered_map<uint32_t,uint8_t> matched_prefix_to_prefix_length_{};
     // the matched prefix to next hop address
     std::unordered_map<uint32_t,std::optional<Address>> matched_prefix_to_next_hop_{};
     // the matched prefix to sending out interface number
